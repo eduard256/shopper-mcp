@@ -15,8 +15,8 @@
   "license": "MIT",
   "engines": { "node": ">=20" },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "playwright": "1.60.0",
-    "zod": "^3.25.0"
+    "zod": "3.25.76"
   }
 }
