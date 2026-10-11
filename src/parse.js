@@ -88,7 +88,7 @@ function parseSearchItem(it) {
 
   // brand: a labelListV2 that is not the rating block; take its first text item, but skip
   // marketing badges ("Стало дешевле", "Оригинал", "Хит", price-drop labels, etc.)
-  const BADGE = /^(стало дешевле|оригинал|хит|новинка|акция|распродажа|выбор|бестселлер|ozon|premium|самовывоз|скидка)/i;
+  const BADGE = /^(стало дешевле|оригинал|хит|новинка|акция|распродажа|выбор|бестселлер|ozon|premium|самовывоз|скидка|бренд проверен|официальн)/i;
   let brand = null;
   const labelLists = ms
     .filter((s) => s.labelListV2 && !JSON.stringify(s.labelListV2).includes("ic_s_star"))
@@ -129,7 +129,48 @@ export function parseSearch(page, limit = 12) {
   const grid = widget(page, "tileGridDesktop");
   const raw = grid?.items || [];
   const items = raw.map(parseSearchItem).filter(Boolean).slice(0, limit);
-  return { count: items.length, items };
+  const hasNext = !!widget(page, "infiniteVirtualPaginator")?.nextPage;
+  return { count: items.length, hasNext, items };
+}
+
+// ── search filters ──────────────────────────────────────────────────────────────
+// filtersDesktop.sections[].filters[]: {type, key, boolFilter|checkboxesFilter|rangeFilter|
+// multipleRangesFilter|colorFilter|categoryFilter}. В URL: bool -> key=t, checkboxes -> key=id1,id2,
+// range -> key=min.000;max.000. Категория задаётся отдельным путём /category/<slug>/.
+
+function filterOptions(f) {
+  const cb = f.checkboxesFilter || f.colorFilter;
+  if (cb) return (cb.sections || []).flatMap((s) => s.items || []).map((i) => ({ key: String(i.key), title: i.title?.text || i.title || i.name || String(i.key), selected: !!i.isSelected })).filter((o) => o.title);
+  if (f.categoryFilter) return (f.categoryFilter.categories || []).map((c) => ({ key: c.urlValue || c.key, title: c.title, level: c.level }));
+  return [];
+}
+
+function filterRange(f) {
+  const r = f.rangeFilter || f.multipleRangesFilter?.rangeFilter;
+  if (!r) return null;
+  const num = (x) => (x == null ? null : Number(String(x).replace(/[^\d.]/g, "")) || null);
+  return { min: num(r.minValue ?? r.min ?? r.leftBound), max: num(r.maxValue ?? r.max ?? r.rightBound) };
+}
+
+/** Все фильтры страницы поиска/каталога: [{key, title, type, options[], range}]. */
+export function parseFilters(page) {
+  const out = [];
+  for (const w of widgets(page, "filtersDesktop")) {
+    for (const s of w.sections || []) {
+      for (const f of s.filters || []) {
+        const body = f.boolFilter || f.checkboxesFilter || f.colorFilter || f.rangeFilter || f.multipleRangesFilter?.rangeFilter || f.categoryFilter || {};
+        const type = f.type === "boolFilter" ? "bool" : /checkboxes|color/.test(f.type) ? "checkboxes" : /range/i.test(f.type) ? "range" : f.type === "categoryFilter" ? "category" : f.type;
+        const entry = { key: f.key, title: (body.title || "").replace(/\s+/g, " ").trim(), type };
+        if (body.description?.text) entry.description = body.description.text.replace(/<[^>]+>/g, "").trim();
+        const options = filterOptions(f);
+        if (options.length) entry.options = options;
+        const range = filterRange(f);
+        if (range) entry.range = range;
+        if (!out.some((e) => e.key === entry.key)) out.push(entry);
+      }
+    }
+  }
+  return out;
 }
 
 // ── product details ─────────────────────────────────────────────────────────────
@@ -182,40 +223,27 @@ function parseSeller(page) {
   return { name, rating, url };
 }
 
-/** webDescription.richAnnotationJson holds rich content blocks: text items and images. */
-export function parseDescription(page2) {
-  const w = widgets(page2, "webDescription").find((x) => x.richAnnotationJson);
-  if (!w) return { text: "", images: [] };
-  let ra = w.richAnnotationJson;
-  if (typeof ra === "string") {
-    try {
-      ra = JSON.parse(ra);
-    } catch {
-      return { text: "", images: [] };
+/**
+ * Полные характеристики со страницы /features/ (composer): webCharacteristics.characteristics[].short[]/long[]
+ * -> {name: "значение, значение"}. Берём виджет с наибольшим числом позиций (второй дублирует первые пять).
+ */
+export function parseFullCharacteristics(featuresPage) {
+  let best = {};
+  for (const w of widgets(featuresPage, "webCharacteristics")) {
+    const out = {};
+    for (const g of w.characteristics || []) {
+      for (const c of [...(g.short || []), ...(g.long || [])]) {
+        const name = c.name || c.key;
+        const value = (c.values || []).map((v) => v.text).filter(Boolean).join(", ");
+        if (name && value) out[name] = value;
+      }
     }
+    if (Object.keys(out).length > Object.keys(best).length) best = out;
   }
-  const texts = [];
-  const images = [];
-  const walk = (n) => {
-    if (!n) return;
-    if (Array.isArray(n)) return n.forEach(walk);
-    if (typeof n !== "object") return;
-    if (n.type === "text" && typeof n.content === "string") texts.push(n.content);
-    if (n.img?.src) images.push(n.img.src);
-    if (Array.isArray(n.items))
-      n.items.forEach((it) => {
-        if (it?.type === "text" && typeof it.content === "string") texts.push(it.content);
-      });
-    for (const k in n) if (n[k] && typeof n[k] === "object") walk(n[k]);
-  };
-  walk(ra.content || ra);
-  return {
-    text: texts.join(" ").replace(/\s+/g, " ").trim(),
-    images: [...new Set(images)],
-  };
+  return best;
 }
 
-export function parseDetails(basePage, page2) {
+export function parseDetails(basePage) {
   const heading = widget(basePage, "webProductHeading");
   const price = widget(basePage, "webPrice");
   const gallery = widget(basePage, "webGallery");
@@ -230,6 +258,10 @@ export function parseDetails(basePage, page2) {
     (sku ? `https://www.ozon.ru/product/${sku}/` : null);
 
   const { rating, reviews } = parseProductScore(basePage);
+  // webAspects: варианты (цвет, размер) одной карточки. Отзывы и рейтинг у вариантов общие,
+  // поэтому variants > 1 значит "рейтинг агрегирован по нескольким моделям/цветам".
+  const aspects = widget(basePage, "webAspects")?.aspects || [];
+  const variants = aspects.reduce((m, a) => Math.max(m, Number(a.aspectModalInfo?.realNumberOfVariants) || (a.variants || []).length || 0), 0) || null;
 
   const images = [];
   if (gallery?.coverImage) images.push(gallery.coverImage);
@@ -248,10 +280,10 @@ export function parseDetails(basePage, page2) {
     available: price?.isAvailable ?? null,
     rating,
     reviews,
+    variants,
     seller: parseSeller(basePage),
     images: [...new Set(images)].slice(0, 10),
     characteristics: parseShortCharacteristics(basePage),
-    description: parseDescription(page2),
   };
 }
 
@@ -290,7 +322,13 @@ export function parseReviews(page, limit = 10) {
     };
   });
 
-  return { rating, totalReviews: total, count: reviews.length, reviews };
+  const scoreW = widget(page, "webReviewProductScore");
+  const distribution = Array.isArray(scoreW?.score)
+    ? Object.fromEntries(scoreW.score.map((x) => [String(x.title).match(/\d/)?.[0] ?? x.title, x.value]))
+    : null;
+  const paging = w?.paging ? { page: w.paging.page, perPage: w.paging.perPage, total: w.paging.total } : null;
+  const sortings = Array.isArray(w?.sortings) ? w.sortings.map((x) => x.value) : null;
+  return { rating, totalReviews: total, distribution, paging, sortings, count: reviews.length, reviews };
 }
 
 export const _internal = { priceToNumber, cleanUrl, skuFromUrl, widget };
