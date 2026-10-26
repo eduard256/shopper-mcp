@@ -1,0 +1,43 @@
+name: Bug
+description: Something does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked the agent, what you expected and what you got.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.0.3
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options: [npx, Docker, Claude Desktop extension (.mcpb), from source]
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: OS and MCP client
+      placeholder: macOS 15, Claude Code
+    validations:
+      required: true
+  - type: dropdown
+    id: marketplace
+    attributes:
+      label: Marketplace
+      options: [ozon.ru, other]
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: Lines starting with [shopper] from the client's MCP log (stderr).
+      render: text

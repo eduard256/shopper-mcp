@@ -1,0 +1,146 @@
+name: release
+
+# Tag vX.Y.Z  -> stable release: npm latest, Docker latest, GitHub Release, MCP Registry.
+# Run manually on any branch -> dev build X.Y.Z-dev-<sha>: npm tag "dev" and Docker tag of the same name.
+#
+# Repo rename: update repository.url in package.json and recreate the npm Trusted Publisher
+# (npmjs.com -> shopper-mcp -> Settings), it is bound to owner/repo/release.yml.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dev: ${{ steps.version.outputs.dev }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "${GITHUB_REF_NAME#v}" != "$pkg" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match package.json version $pkg"
+              exit 1
+            fi
+            echo "version=$pkg" >> "$GITHUB_OUTPUT"
+            echo "dev=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$pkg-dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            echo "dev=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  npm:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm Trusted Publishing (OIDC), no token secret
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # OIDC with dist-tags needs npm >= 11.21
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --allow-same-version
+      - run: npm publish --tag ${{ needs.version.outputs.dev == 'true' && 'dev' || 'latest' }}
+
+  docker:
+    needs: [version, npm]
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      output: image
+      push: true
+      platforms: linux/amd64,linux/arm64
+      # ozon-mcp-server is the old image name, kept updated for existing users.
+      meta-images: |
+        eduard256/shopper-mcp
+        eduard256/ozon-mcp-server
+      meta-tags: |
+        type=raw,value=${{ needs.version.outputs.version }}
+        type=raw,value=latest,enable=${{ needs.version.outputs.dev == 'false' }}
+    secrets:
+      registry-auths: |
+        - registry: docker.io
+          username: eduard256
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  github-release:
+    if: needs.version.outputs.dev == 'false'
+    needs: [version, npm, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # MCP Registry login (OIDC)
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags and history for release notes
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack
+
+      - name: Build .mcpb
+        run: |
+          mkdir stage
+          cp -r dist package.json package-lock.json stage/
+          jq --arg v "$VERSION" '.version = $v' mcpb/manifest.json > stage/manifest.json
+          (cd stage && npm ci --omit=dev)
+          npx -y @anthropic-ai/mcpb@2 validate stage/manifest.json
+          npx -y @anthropic-ai/mcpb@2 pack stage "shopper-mcp-$VERSION.mcpb"
+
+      - name: Release notes from commits
+        run: |
+          previous=$(git describe --tags --abbrev=0 "v$VERSION^" 2>/dev/null || true)
+          range="v$VERSION"
+          if [ -n "$previous" ]; then range="$previous..v$VERSION"; fi
+          {
+            echo '## Install'
+            echo '```'
+            echo "npx -y shopper-mcp@$VERSION"
+            echo "docker pull eduard256/shopper-mcp:$VERSION"
+            echo '```'
+            echo
+            echo "## What's changed"
+            git log --no-merges --pretty='- %s (%h)' "$range"
+            if [ -n "$previous" ]; then
+              echo
+              echo "**Full Changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$previous...v$VERSION"
+            fi
+          } > notes.md
+
+      - run: >-
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file notes.md
+          "shopper-mcp-$VERSION.mcpb" "shopper-mcp-$VERSION.tgz"
+
+      - name: Publish to MCP Registry
+        run: |
+          sha=$(sha256sum "shopper-mcp-$VERSION.mcpb" | cut -d' ' -f1)
+          jq --arg v "$VERSION" --arg sha "$sha" --arg repo "$GITHUB_REPOSITORY" '
+            .version = $v
+            | .packages[0].version = $v
+            | .packages[1].identifier = "docker.io/eduard256/shopper-mcp:" + $v
+            | .packages[2].identifier = "https://github.com/" + $repo + "/releases/download/v" + $v + "/shopper-mcp-" + $v + ".mcpb"
+            | .packages[2].fileSha256 = $sha' server.json > server.tmp && mv server.tmp server.json
+          curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

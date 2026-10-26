@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Separate PR: patchright updates follow site antibot changes and deserve a manual check.
+      patchright:
+        patterns: [patchright]
+      dependencies:
+        patterns: ['*']
+        exclude-patterns: [patchright]
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

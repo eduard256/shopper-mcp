@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Smoke test the packed package over stdio
+        shell: bash
+        run: node scripts/smoke.mjs "$(npm pack --silent)"
+      - name: Audit production dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        run: npm audit --omit=dev --audit-level=critical
+
+  docker:
+    name: docker (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: docker build -t shopper-smoke .
+      - name: Smoke test the image over stdio
+        run: node scripts/smoke.mjs --docker shopper-smoke
+      - name: Chromium starts inside the image
+        run: >-
+          docker run --rm --entrypoint node shopper-smoke --input-type=module -e
+          "import { chromium } from 'patchright';
+          const browser = await chromium.launch({ channel: 'chromium' });
+          console.log('chromium ok', browser.version());
+          await browser.close();"

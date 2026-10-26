@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.eduard256/shopper-mcp",
+  "title": "Shopper",
+  "description": "AI shopping on marketplaces (Ozon) through a background browser: search, compare, product lists.",
+  "repository": {
+    "url": "https://github.com/eduard256/shopper-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "shopper-mcp",
+      "version": "0.0.0",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/eduard256/shopper-mcp:0.0.0",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/eduard256/shopper-mcp/releases/download/v0.0.0/shopper-mcp-0.0.0.mcpb",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.github
+.claude
+.playwright-mcp
+test
+docs
+*.log
+*.tgz

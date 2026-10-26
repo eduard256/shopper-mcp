@@ -7,3 +7,8 @@ dist/
 .playwright-mcp/
 .mcp.json
 .claude/settings.local.json
+
+# Release artifacts
+*.tgz
+*.mcpb
+stage/

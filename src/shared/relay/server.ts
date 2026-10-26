@@ -119,9 +119,9 @@ function startServer(): Promise<number> {
       serverPort = null;
       reject(error);
     });
-    server.listen(config.relayPort, '127.0.0.1', () => {
+    server.listen(config.relayPort, config.relayHost, () => {
       const { port } = server.address() as AddressInfo;
-      log('relay listening on 127.0.0.1:' + port);
+      log(`relay listening on ${config.relayHost}:${port}`);
       resolve(port);
     });
     server.unref();

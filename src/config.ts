@@ -7,6 +7,7 @@ const dataDir = envPaths('shopper-mcp', { suffix: '' }).data;
 export const config = {
   headless: process.env.SHOPPER_HEADLESS !== 'false',
   profileDir: process.env.SHOPPER_PROFILE_DIR ?? path.join(dataDir, 'profile'),
+  relayHost: process.env.SHOPPER_RELAY_HOST ?? '127.0.0.1', // 0.0.0.0 inside Docker
   relayPort: Number(process.env.SHOPPER_RELAY_PORT ?? 0), // 0 = any free port
   relayTtlSec: 15 * 60,
   maxResponseChars: 20_000,

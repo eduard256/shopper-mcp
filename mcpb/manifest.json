@@ -1,0 +1,28 @@
+{
+  "manifest_version": "0.3",
+  "name": "shopper-mcp",
+  "display_name": "Shopper",
+  "version": "0.0.0",
+  "description": "AI shopping on marketplaces (Ozon) through a background browser: search, compare, product lists.",
+  "author": { "name": "eduard256", "url": "https://github.com/eduard256" },
+  "repository": { "type": "git", "url": "https://github.com/eduard256/shopper-mcp" },
+  "homepage": "https://github.com/eduard256/shopper-mcp",
+  "support": "https://github.com/eduard256/shopper-mcp/issues",
+  "license": "MIT",
+  "privacy_policies": ["https://github.com/eduard256/shopper-mcp/blob/master/PRIVACY.md"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": { "command": "node", "args": ["${__dirname}/dist/index.js"] }
+  },
+  "tools": [
+    { "name": "shop_get_info", "description": "Session state per marketplace: login, delivery address, pauses, docs topics." },
+    { "name": "shop_docs", "description": "How a marketplace's internal API works: ready-made requests and filters." },
+    { "name": "shop_request", "description": "Request to a marketplace's internal API from the server's browser session." },
+    { "name": "shop_show", "description": "Open a site page in a live tab the user can see and control." }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": { "node": ">=22" }
+  }
+}
