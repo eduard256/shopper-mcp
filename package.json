@@ -1,22 +1,34 @@
 {
-  "name": "ozon-mcp-server",
-  "version": "0.0.1",
-  "description": "MCP server for searching Ozon products and reading product details and reviews. A single long-lived headless Chromium passes Ozon's anti-bot challenge; data is fetched as JSON from Ozon's internal composer API.",
+  "name": "shopper-mcp",
+  "version": "0.0.2",
+  "description": "MCP server that lets an AI agent shop on marketplaces through a background browser",
   "type": "module",
   "bin": {
-    "ozon-mcp-server": "src/index.js"
+    "shopper-mcp": "dist/index.js"
   },
-  "main": "src/index.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "start": "node src/index.js",
-    "test:parse": "node test/parse.test.js"
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "start": "node dist/index.js",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
-  "keywords": ["mcp", "ozon", "marketplace", "search", "playwright"],
   "license": "MIT",
-  "engines": { "node": ">=20" },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
-    "playwright": "1.60.0",
-    "zod": "^3.25.0"
+    "@modelcontextprotocol/server": "^2.4.0",
+    "env-paths": "^4.0.0",
+    "jq-wasm": "^3.0.0-jq-1.8.2",
+    "patchright": "^1.64.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

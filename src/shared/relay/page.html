@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shopper — live tab</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #111; color: #eee; }
+  header { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; background: #222; }
+  button, input { font: inherit; padding: 6px 10px; border: 1px solid #444; border-radius: 6px; background: #333; color: #eee; }
+  form { display: flex; flex: 1 1 220px; gap: 6px; }
+  #text { flex: 1; min-width: 0; }
+  #mode.drag { background: #1565c0; border-color: #1565c0; }
+  #done { margin-left: auto; background: #2e7d32; border-color: #2e7d32; }
+  #screen { display: block; width: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #status { padding: 40px 16px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <form id="send"><input id="text" placeholder="Text to type" autocomplete="off"><button>Send</button></form>
+  <button data-key="Enter">Enter</button>
+  <button data-key="Backspace">⌫</button>
+  <button data-key="Tab">Tab</button>
+  <button id="mode" title="Touch screens: scroll the page, or drag (sliders, maps)">Touch: scroll</button>
+  <button id="done">Done</button>
+</header>
+<div id="status">Connecting…</div>
+<img id="screen" alt="" draggable="false" hidden>
+<script>
+  const base = location.pathname;
+  const img = document.getElementById('screen');
+  const statusBox = document.getElementById('status');
+  let frame = { w: 1280, h: 800 };
+
+  // Events go out in order, one batch at a time; consecutive moves are merged.
+  let queue = [];
+  let sending = false;
+  function send(event) {
+    const last = queue[queue.length - 1];
+    if (event.t === 'move' && last && last.t === 'move') queue[queue.length - 1] = event;
+    else queue.push(event);
+    if (!sending) flush();
+  }
+  async function flush() {
+    sending = true;
+    while (queue.length) {
+      const batch = queue;
+      queue = [];
+      await fetch(base + '/input', { method: 'POST', body: JSON.stringify(batch) }).catch(() => {});
+    }
+    sending = false;
+  }
+
+  function end(text) {
+    frames.close();
+    img.hidden = true;
+    document.querySelector('header').hidden = true;
+    statusBox.hidden = false;
+    statusBox.textContent = text;
+  }
+
+  const frames = new EventSource(base + '/frames');
+  frames.onmessage = (e) => {
+    frame = JSON.parse(e.data);
+    img.src = 'data:image/jpeg;base64,' + frame.img;
+    img.hidden = false;
+    statusBox.hidden = true;
+  };
+  frames.addEventListener('done', () => end('Done. You can close this page.'));
+  frames.onerror = () => { if (frames.readyState === EventSource.CLOSED) end('The link has expired.'); };
+
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  function point(e) {
+    const r = img.getBoundingClientRect();
+    return { x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) };
+  }
+  const scale = () => frame.w / img.getBoundingClientRect().width;
+
+  // Mouse always drags. Touch either scrolls (tap = click) or drags, switched by the Touch button.
+  let touchMode = 'scroll';
+  let gesture = null;
+  const modeButton = document.getElementById('mode');
+  modeButton.onclick = () => {
+    touchMode = touchMode === 'scroll' ? 'drag' : 'scroll';
+    modeButton.textContent = 'Touch: ' + touchMode;
+    modeButton.classList.toggle('drag', touchMode === 'drag');
+  };
+
+  img.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    img.setPointerCapture(e.pointerId);
+    gesture = { scroll: e.pointerType !== 'mouse' && touchMode === 'scroll', x: e.clientX, y: e.clientY, moved: false };
+    if (!gesture.scroll) send({ t: 'down', ...point(e) });
+  });
+  img.addEventListener('pointermove', (e) => {
+    if (!gesture) {
+      if (e.pointerType === 'mouse') send({ t: 'move', ...point(e) });
+      return;
+    }
+    if (!gesture.scroll) return send({ t: 'move', ...point(e) });
+    const dx = gesture.x - e.clientX;
+    const dy = gesture.y - e.clientY;
+    if (Math.abs(dx) + Math.abs(dy) < 6) return;
+    Object.assign(gesture, { x: e.clientX, y: e.clientY, moved: true });
+    send({ t: 'wheel', ...point(e), dx: dx * scale(), dy: dy * scale() });
+  });
+  function release(e) {
+    if (!gesture) return;
+    if (!gesture.scroll) send({ t: 'up', ...point(e) });
+    else if (!gesture.moved) {
+      send({ t: 'move', ...point(e) });
+      send({ t: 'down', ...point(e) });
+      send({ t: 'up', ...point(e) });
+    }
+    gesture = null;
+  }
+  img.addEventListener('pointerup', release);
+  img.addEventListener('pointercancel', release);
+  img.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    send({ t: 'wheel', ...point(e), dx: e.deltaX * scale(), dy: e.deltaY * scale() });
+  }, { passive: false });
+
+  const textInput = document.getElementById('text');
+  document.getElementById('send').onsubmit = (e) => {
+    e.preventDefault();
+    if (textInput.value) send({ t: 'text', text: textInput.value });
+    textInput.value = '';
+  };
+  document.querySelectorAll('[data-key]').forEach((b) => { b.onclick = () => send({ t: 'key', key: b.dataset.key }); });
+
+  // Desktop: typing outside the text box goes straight to the page.
+  const specialKeys = ['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+  document.addEventListener('keydown', (e) => {
+    if (e.target === textInput || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length === 1) send({ t: 'text', text: e.key });
+    else if (specialKeys.includes(e.key)) send({ t: 'key', key: e.key });
+    else return;
+    e.preventDefault();
+  });
+
+  document.getElementById('done').onclick = async () => {
+    await fetch(base + '/done', { method: 'POST' }).catch(() => {});
+    end('Done. You can close this page.');
+  };
+</script>
+</body>
+</html>
