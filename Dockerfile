@@ -1,5 +1,5 @@
 # Build stage: compile TypeScript from a clean checkout.
-FROM node:24-trixie-slim AS build
+FROM node:26-trixie-slim AS build
 WORKDIR /app
 COPY package*.json tsconfig.json ./
 RUN npm ci
@@ -8,7 +8,7 @@ COPY src ./src
 RUN npm run build
 
 # Runtime stage: production deps and Chromium baked in, so the first run downloads nothing.
-FROM node:24-trixie-slim
+FROM node:26-trixie-slim
 LABEL io.modelcontextprotocol.server.name="io.github.eduard256/shopper-mcp"
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
