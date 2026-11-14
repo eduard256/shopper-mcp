@@ -10,6 +10,7 @@ export const config = {
   inContainer: process.env.SHOPPER_IN_CONTAINER === 'true', // set by the Dockerfile
   relayHost: process.env.SHOPPER_RELAY_HOST ?? '127.0.0.1', // 0.0.0.0 inside Docker
   relayPort: Number(process.env.SHOPPER_RELAY_PORT ?? 0), // 0 = any free port
+  relayUrl: process.env.SHOPPER_RELAY_URL,
   relayTtlSec: 15 * 60,
   maxResponseChars: 20_000,
   tabIdleMs: 10 * 60_000,

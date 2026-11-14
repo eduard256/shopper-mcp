@@ -50,7 +50,7 @@ export async function openRelay(
   };
   sessions.set(token, session);
   log('relay opened', page.url());
-  return { url: `http://127.0.0.1:${port}/s/${token}`, expiresAt };
+  return { url: `${config.relayUrl ?? `http://127.0.0.1:${port}`}/s/${token}`, expiresAt };
 }
 
 async function finish(session: Session, byUser: boolean): Promise<void> {
