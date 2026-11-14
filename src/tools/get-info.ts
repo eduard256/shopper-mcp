@@ -4,6 +4,7 @@ import { getMarketplace, marketplaceIds } from '../marketplaces/index.js';
 import type { Marketplace } from '../marketplaces/types.js';
 import { listTopics } from '../shared/docs.js';
 import { describePause, getPause } from '../shared/queue.js';
+import { captchaHints } from '../shared/hints.js';
 import { siteRequest } from '../shared/site.js';
 import { textResult } from './result.js';
 
@@ -30,7 +31,7 @@ async function collect(m: Marketplace, tellUser: string[]): Promise<Record<strin
   const pause = getPause(m.id);
   if (pause) {
     facts.paused = describePause(m.id, pause);
-    if (pause.relay) tellUser.push(`${m.id} asks to solve a captcha: open ${pause.relay}, solve it and press Done.`);
+    if (pause.relay) tellUser.push(`${m.id} asks to solve a captcha: open ${pause.relay}, solve it and press Done.`, ...captchaHints());
   }
   facts.docs = await listTopics(m);
   return facts;

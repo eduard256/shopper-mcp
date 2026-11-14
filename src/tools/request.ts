@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { getMarketplace, marketplaceIds } from '../marketplaces/index.js';
 import { applyJq } from '../shared/jq.js';
+import { captchaHints } from '../shared/hints.js';
 import { fit } from '../shared/limit.js';
 import { siteRequest } from '../shared/site.js';
 import { textResult } from './result.js';
@@ -39,7 +40,7 @@ export function registerRequest(server: McpServer): void {
 
       const response = await siteRequest(m, path, body);
       if (response.block) {
-        return textResult({ status: response.status, ...fit(response.body), relay: response.relay });
+        return textResult({ status: response.status, ...fit(response.body), relay: response.relay, hints: response.relay && captchaHints() });
       }
       const parsed = m.parse(response.body);
       const value = jq ? await applyJq(parsed, jq) : parsed;
