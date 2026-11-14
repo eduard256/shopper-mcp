@@ -18,6 +18,7 @@
     {
       "registryType": "oci",
       "identifier": "docker.io/eduard256/shopper-mcp:0.0.0",
+      "runtimeArguments": [{ "type": "named", "name": "--volume", "value": "shopper-data:/data" }],
       "transport": { "type": "stdio" }
     },
     {
