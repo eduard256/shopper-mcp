@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { log } from '../log.js';
 
 let contextPromise: Promise<BrowserContext> | null = null;
+let mac: { userAgent: string; brands: { brand: string; version: string }[] } | null = null;
 const siteTabs = new Map<string, { page: Page; idleTimer?: NodeJS.Timeout }>();
 
 function ensureChromium(): void {
@@ -31,7 +32,7 @@ function clearContainerProfileLock(): void {
 async function launch(): Promise<BrowserContext> {
   ensureChromium();
   if (config.inContainer) clearContainerProfileLock();
-  const options = { channel: 'chromium', headless: config.headless, viewport: { width: 1280, height: 800 } };
+  const options = { channel: 'chromium', headless: config.headless, locale: config.locale, viewport: { width: 1280, height: 800 } };
   let context = await chromium.launchPersistentContext(config.profileDir, options);
 
   // Headless Chromium puts "HeadlessChrome" into its User-Agent and sites block it.
@@ -43,12 +44,30 @@ async function launch(): Promise<BrowserContext> {
     context = await chromium.launchPersistentContext(config.profileDir, { ...options, args });
   }
 
+  // Ozon shows a captcha to Linux browsers, so on Linux (Docker, VPS) the tabs present themselves as a Mac.
+  if (process.platform === 'linux') {
+    const page = context.pages()[0] ?? (await context.newPage());
+    const brands = await page.evaluate(() => (navigator as unknown as { userAgentData: { brands: { brand: string; version: string }[] } }).userAgentData.brands, undefined, undefined, false);
+    mac = { userAgent: userAgent.replace('HeadlessChrome', 'Chrome').replace(/\([^)]*\)/, '(Macintosh; Intel Mac OS X 10_15_7)'), brands };
+  }
+
   context.on('close', () => {
     contextPromise = null;
     siteTabs.clear();
   });
   log('browser started:', config.headless ? 'headless' : 'visible', config.profileDir);
   return context;
+}
+
+async function disguise(page: Page): Promise<void> {
+  if (!mac) return;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setUserAgentOverride', {
+    userAgent: mac.userAgent,
+    platform: 'MacIntel',
+    acceptLanguage: config.locale,
+    userAgentMetadata: { brands: mac.brands, fullVersionList: mac.brands, platform: 'macOS', platformVersion: '15.5.0', architecture: 'arm', model: '', mobile: false, bitness: '64', wow64: false },
+  });
 }
 
 function browserContext(): Promise<BrowserContext> {
@@ -93,6 +112,7 @@ export async function siteTab(id: string, origin: string): Promise<Page> {
     const used = new Set([...siteTabs.values()].map((t) => t.page));
     const page = context.pages().find((p) => p.url() === 'about:blank' && !used.has(p)) ?? (await context.newPage());
     try {
+      await disguise(page);
       await openPastAntibot(page, origin + '/');
     } catch (error) {
       await page.close().catch(() => undefined);
@@ -116,6 +136,7 @@ export async function siteTab(id: string, origin: string): Promise<Page> {
 // A separate tab for the user (relay): no antibot waiting, the user sees whatever loads.
 export async function openTab(url: string): Promise<Page> {
   const page = await (await browserContext()).newPage();
+  await disguise(page);
   await page
     .goto(url, { waitUntil: 'domcontentloaded', timeout: config.navigationTimeoutMs })
     .catch((error: Error) => log('open tab:', error.message));

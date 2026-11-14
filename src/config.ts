@@ -7,6 +7,7 @@ const dataDir = envPaths('shopper-mcp', { suffix: '' }).data;
 export const config = {
   headless: process.env.SHOPPER_HEADLESS !== 'false',
   profileDir: process.env.SHOPPER_PROFILE_DIR ?? path.join(dataDir, 'profile'),
+  locale: process.env.SHOPPER_LOCALE, // e.g. de-DE; unset = system language
   inContainer: process.env.SHOPPER_IN_CONTAINER === 'true', // set by the Dockerfile
   relayHost: process.env.SHOPPER_RELAY_HOST ?? '127.0.0.1', // 0.0.0.0 inside Docker
   relayPort: Number(process.env.SHOPPER_RELAY_PORT ?? 0), // 0 = any free port
