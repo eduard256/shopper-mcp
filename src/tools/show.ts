@@ -25,7 +25,7 @@ export function registerShow(server: McpServer): void {
     async ({ marketplace, path }) => {
       const m = getMarketplace(marketplace);
       const url = new URL(path, m.origin);
-      if (!url.hostname.endsWith(m.id)) throw new Error(`Not a ${m.id} URL: ${path}`);
+      if (url.hostname !== m.id && !url.hostname.endsWith('.' + m.id)) throw new Error(`Not a ${m.id} URL: ${path}`);
       const relay = await openRelay(await openTab(url.href), { closePage: true });
       return textResult({ url: relay.url, expiresInSec: config.relayTtlSec });
     },
