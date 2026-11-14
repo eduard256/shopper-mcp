@@ -11,6 +11,7 @@ RUN npm run build
 FROM node:24-trixie-slim
 LABEL io.modelcontextprotocol.server.name="io.github.eduard256/shopper-mcp"
 ENV NODE_ENV=production \
+    SHOPPER_IN_CONTAINER=true \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     SHOPPER_PROFILE_DIR=/data/profile \
     SHOPPER_RELAY_HOST=0.0.0.0 \

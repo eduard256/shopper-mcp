@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'patchright';
@@ -19,8 +19,18 @@ function ensureChromium(): void {
   if (result.status !== 0) throw new Error('Chromium download failed, see the server log');
 }
 
+// Chromium's profile lock names the host, and every container gets a new hostname, so a lock left
+// by a previous container looks held by another computer and Chromium refuses to start.
+// One container per profile volume is assumed.
+function clearContainerProfileLock(): void {
+  for (const name of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    rmSync(path.join(config.profileDir, name), { force: true });
+  }
+}
+
 async function launch(): Promise<BrowserContext> {
   ensureChromium();
+  if (config.inContainer) clearContainerProfileLock();
   const options = { channel: 'chromium', headless: config.headless, viewport: { width: 1280, height: 800 } };
   let context = await chromium.launchPersistentContext(config.profileDir, options);
 
