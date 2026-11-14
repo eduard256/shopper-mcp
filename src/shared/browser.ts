@@ -47,7 +47,9 @@ async function launch(): Promise<BrowserContext> {
   // Ozon shows a captcha to Linux browsers, so on Linux (Docker, VPS) the tabs present themselves as a Mac.
   if (process.platform === 'linux') {
     const page = context.pages()[0] ?? (await context.newPage());
+    await page.goto('chrome://version'); // userAgentData exists only on secure pages, about:blank is not one
     const brands = await page.evaluate(() => (navigator as unknown as { userAgentData: { brands: { brand: string; version: string }[] } }).userAgentData.brands, undefined, undefined, false);
+    await page.goto('about:blank');
     mac = { userAgent: userAgent.replace('HeadlessChrome', 'Chrome').replace(/\([^)]*\)/, '(Macintosh; Intel Mac OS X 10_15_7)'), brands };
   }
 
